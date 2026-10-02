@@ -505,7 +505,8 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
   }
   function formAlias(ref, actual){
     if (!dbListo || !puedeEscribir) return '';
-    return '<form class="alias-form" data-ref="' + esc(ref) + '"><input type="text" maxlength="80" placeholder="¿De quién es esta cuenta?" value="' + esc(actual || '') + '" aria-label="Nombre para ' + esc(etiquetaRef(ref)) + '"><button type="submit" class="btn small">Guardar</button></form>';
+    var propio = !!(aliases[ref] && (aliases[ref].fuente === 'este dispositivo' || aliases[ref].fuente === 'manual'));
+    return '<form class="alias-form" data-ref="' + esc(ref) + '"><input type="text" maxlength="80" placeholder="¿De quién es esta cuenta?" value="' + esc(actual || '') + '" aria-label="Nombre para ' + esc(etiquetaRef(ref)) + '"><button type="submit" class="btn small">Guardar</button>' + (propio ? '<button type="button" class="btn small alias-quitar">Quitar</button>' : '') + '</form>';
   }
   document.addEventListener('submit', function(ev){
     var f = ev.target; if (!f.classList || !f.classList.contains('alias-form')) return;
@@ -514,6 +515,12 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     btn.disabled = true; btn.textContent = 'Guardando…';
     guardarAlias(ref, val).then(function(){ btn.textContent = 'Guardado'; setTimeout(function(){ btn.disabled = false; btn.textContent = 'Guardar'; }, 1200); },
       function(e){ btn.disabled = false; btn.textContent = 'No se pudo guardar'; setTimeout(function(){ btn.textContent = 'Guardar'; }, 2500); });
+  });
+  document.addEventListener('click', function(ev){
+    var q = ev.target.closest('.alias-quitar'); if (!q) return;
+    var f = q.closest('.alias-form'); if (!f) return;
+    q.disabled = true; q.textContent = 'Quitando…';
+    guardarAlias(f.dataset.ref, '').then(function(){}, function(){ q.disabled = false; q.textContent = 'No se pudo quitar'; });
   });
   document.addEventListener('click', function(ev){
     var b = ev.target.closest('.alias-btn'); if (!b) return;
@@ -695,7 +702,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     var box = {};
     arr.forEach(function(d){
       var k = fn(d), kk = k.toUpperCase();
-      if (!box[kk]) box[kk] = {k:k, t:0, n:0, ultimo:'', ref:d.ref, anon:esRefAnonima(d) && !tieneNombre(d)};
+      if (!box[kk]) box[kk] = {k:k, t:0, n:0, ultimo:'', ref:d.ref, anon:esRefAnonima(d) && !tieneNombre(d), cuenta:esRefAnonima(d)};
       box[kk].t += d.monto; box[kk].n++; if (d.fecha > box[kk].ultimo) box[kk].ultimo = d.fecha;
     });
     return Object.keys(box).map(function(k){ return box[k]; }).sort(function(a, b){ return b.t - a.t; });
@@ -714,8 +721,10 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     if (!arr.length) return '<tr><td colspan="3"><div class="empty-note">Nada en este período.</div></td></tr>';
     return arr.map(function(c){
       var pct = total ? c.t / total * 100 : 0;
-      var nombre = c.anon ? '<span class="unnamed">' + esc(c.k) + '</span> <button type="button" class="alias-btn" data-ref="' + esc(c.ref) + '">✎ ponerle nombre</button>' : esc(c.k);
-      return '<tr><td class="desc">' + nombre + '<small>' + numFmt(c.n) + ' mov. · último ' + fechaCorta(c.ultimo) + '</small></td><td class="num mono ' + cls + '">' + fmt(c.t) + '</td><td class="num mono">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</td></tr>';
+      var nombre = c.anon ? '<span class="unnamed">' + esc(c.k) + '</span> <button type="button" class="alias-btn" data-ref="' + esc(c.ref) + '">✎ ponerle nombre</button>'
+        : esc(c.k) + (c.cuenta && dbListo && puedeEscribir ? ' <button type="button" class="alias-btn" data-ref="' + esc(c.ref) + '" title="Cambiar o quitar el nombre">✎</button>' : '');
+      var deCuenta = c.cuenta && !c.anon ? etiquetaRef(c.ref) + ' · ' : '';
+      return '<tr><td class="desc">' + nombre + '<small>' + deCuenta + numFmt(c.n) + ' mov. · último ' + fechaCorta(c.ultimo) + '</small></td><td class="num mono ' + cls + '">' + fmt(c.t) + '</td><td class="num mono">' + pct.toFixed(pct < 10 ? 1 : 0) + '%</td></tr>';
     }).join('');
   }
   function renderUnnamed(outs){
@@ -842,7 +851,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
   var IDS = {all:['tbodyAll','todosSum','moreAll'], in:['tbodyIn','tableNoteIn','moreIn'], out:['tbodyOut','tableNoteOut','moreOut']};
   function celdaMov(d){
     var tp = TIPO[d.tipo], nombre = nombreDe(d);
-    var extra = esRefAnonima(d) && !tieneNombre(d) && dbListo && puedeEscribir ? ' <button type="button" class="alias-btn" data-ref="' + esc(d.ref) + '">✎</button>' : '';
+    var extra = esRefAnonima(d) && dbListo && puedeEscribir ? ' <button type="button" class="alias-btn" data-ref="' + esc(d.ref) + '" title="' + (tieneNombre(d) ? 'Cambiar o quitar el nombre' : 'Ponerle nombre') + '">✎</button>' : '';
     var det = tp.label + (d.medio ? ' · ' + d.medio : '') + (esRefAnonima(d) && tieneNombre(d) ? ' · ' + etiquetaRef(d.ref) : '') + (d.tipo === 'C' ? ' · ' + d.cat : '');
     return '<td class="desc"><span class="pill ' + tp.cls + '" style="margin-right:6px">' + (d.sign > 0 ? '▲' : (d.sign < 0 ? '▼' : '✕')) + '</span>' + (tieneNombre(d) ? esc(nombre) : '<span class="unnamed">' + esc(nombre) + '</span>') + extra + '<small>' + esc(det) + '</small></td>';
   }
