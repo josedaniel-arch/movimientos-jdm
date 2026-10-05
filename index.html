@@ -1013,7 +1013,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
 <script>
 (function(){
   'use strict';
-  var LS_K = 'mjdm_k', LS_U = 'mjdm_u', CACHE_DATOS = 'mjdm-datos';
+  var LS_K = 'mjdm_k', LS_U = 'mjdm_u', LS_MALAS = 'mjdm_k_malas', CACHE_DATOS = 'mjdm-datos';
   var candado = document.getElementById('candado'), msg = document.getElementById('candadoMsg'),
       formClave = document.getElementById('formClave'), inpUsuario = document.getElementById('inpUsuario'),
       inpClave = document.getElementById('inpClave'), btnEntrar = document.getElementById('btnEntrar'),
@@ -1048,11 +1048,18 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
   function guardarLlave(k){ llaveMemoria = k; try { localStorage.setItem(LS_K, k); } catch(e){} }
   function olvidarLlave(){ llaveMemoria = null; try { localStorage.removeItem(LS_K); } catch(e){} }
   function quienEntro(u){ try { if (u) localStorage.setItem(LS_U, u); else localStorage.removeItem(LS_U); } catch(e){} }
+  // Enlaces con una llave que ya no sirve (la llave de la app se cambió y se cerraron las sesiones; p. ej. el
+  // ícono del iPhone guardado con el enlace viejo): este dispositivo los recuerda y los ignora.
+  function llavesMalas(){ try { var m = JSON.parse(localStorage.getItem(LS_MALAS) || '[]'); return Array.isArray(m) ? m : []; } catch(e){ return []; } }
+  function marcarMala(k){ try { var m = llavesMalas(); if (m.indexOf(k) < 0){ m.push(k); localStorage.setItem(LS_MALAS, JSON.stringify(m.slice(-5))); } } catch(e){} }
+  function quitarHash(){ try { history.replaceState(null, '', location.pathname + location.search); } catch(e){} }
+  var anterior = null;   // la sesión que había antes de tomar la llave del enlace (por si el enlace ya no sirve)
   function leerLlave(){
     var k = llaveDe(location.hash);
+    if (k && llavesMalas().indexOf(k) >= 0){ quitarHash(); k = null; }
     if (k){
-      var antes = null; try { antes = localStorage.getItem(LS_K); } catch(e){}
-      if (antes !== k) quienEntro(null);
+      var antes = null, u = null; try { antes = localStorage.getItem(LS_K); u = localStorage.getItem(LS_U); } catch(e){}
+      if (antes !== k){ anterior = antes ? {k: antes, u: u} : null; quienEntro(null); }
       guardarLlave(k); return k;
     }
     try { var g = localStorage.getItem(LS_K); if (g) return g; } catch(e){}
@@ -1121,7 +1128,12 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     catch(e){ mostrar('No se pudo descargar la información (' + ((e && e.name === 'AbortError') ? 'la conexión tardó demasiado' : (e && e.message) || e) + ').', false, true); return; }
     try { datos = await descifrar(res.buf, k); }
     catch(e){
-      if (e && e.message === 'llave'){ olvidarLlave(); quienEntro(null); modo = 'clave'; mostrar('La sesión guardada ya no sirve. Entra de nuevo con tu usuario y contraseña.', true, false); return; }
+      if (e && e.message === 'llave'){
+        if (llaveDe(location.hash) === k){
+          marcarMala(k); quitarHash();
+          if (anterior && anterior.k !== k){ var a = anterior; anterior = null; guardarLlave(a.k); quienEntro(a.u); return arrancar(); }
+        }
+        olvidarLlave(); quienEntro(null); modo = 'clave'; mostrar('La sesión guardada ya no sirve. Entra de nuevo con tu usuario y contraseña.', true, false); return; }
       mostrar('No se pudo abrir la información: ' + ((e && e.message) || e), false, true); return;
     }
     generadoActual = datos.meta.generado;
@@ -1137,7 +1149,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
       var res = await traer(); if (!res.red) return false;
       var d = await descifrar(res.buf, k);
       if (generadoActual && d.meta.generado !== generadoActual){ location.reload(); return true; }
-    } catch(e){}
+    } catch(e){ if (e && e.message === 'llave'){ location.reload(); return true; } }   // la llave se cambió: la sesión se cerró
     return false;
   }
   window.__MJDM_revisar = revisar;
