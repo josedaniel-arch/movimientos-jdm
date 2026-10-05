@@ -247,6 +247,10 @@
   .candado-caja label{ font-size:12px; color:var(--text-faint); }
   .candado-caja input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:12.5px; }
   .candado-logo{ width:64px; height:64px; border-radius:16px; box-shadow:var(--shadow); }
+  .candado-caja #formClave input{ font-family:inherit; font-size:16px; }
+  .candado-caja form .btn{ margin-top:4px; padding:10px 12px; font-size:15px; }
+  .candado-caja .btn[disabled]{ opacity:.7; cursor:default; }
+  .candado-caja .link{ font-size:13px; }
 </style>
 </head>
 <body>
@@ -254,12 +258,21 @@
   <div class="candado-caja">
     <img class="candado-logo" src="icon-192.png" alt="">
     <h1>Movimientos JDM</h1>
-    <p id="candadoMsg">Cargando…</p>
+    <p id="candadoMsg" role="status" aria-live="polite">Cargando…</p>
+    <form id="formClave" hidden>
+      <label for="inpUsuario">Usuario</label>
+      <input id="inpUsuario" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <label for="inpClave">Contraseña</label>
+      <input id="inpClave" name="password" type="password" autocomplete="current-password">
+      <button class="btn" type="submit" id="btnEntrar">Entrar</button>
+    </form>
     <form id="candadoForm" hidden>
       <label for="candadoInput">Enlace privado</label>
       <input id="candadoInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://…#k=…">
       <button class="btn" type="submit">Abrir</button>
     </form>
+    <button class="link" type="button" id="verEnlace" hidden>Entrar con el enlace privado</button>
+    <button class="link" type="button" id="verClave" hidden>Entrar con usuario y contraseña</button>
     <button class="btn" type="button" id="candadoReintentar" hidden>Reintentar</button>
   </div>
 </div>
@@ -907,10 +920,10 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     + '<span><span class="k">Nombres de cuentas:</span> el banco solo avisa el número de la cuenta destino. Los nombres precargados vienen de tus registros; los que escribas aquí quedan guardados en este dispositivo.</span>'
     + '<span><span class="k">Ojo:</span> las alertas no traen el saldo de la cuenta, así que el neto es ingresos menos egresos avisados, no el saldo. Las categorías de las compras se asignan por el nombre del comercio y pueden fallar en algún caso.</span>'
     + '<span><span class="k">Actualización:</span> datos al ' + fechaLarga(META.corte) + ' (generados el ' + esc(META.generado) + '). La app se actualiza sola cada hora desde tu PC mientras esté encendido.</span>'
-    + '<span><span class="k">Privacidad:</span> los movimientos viajan cifrados; solo se abren con la llave de tu enlace privado. <button type="button" class="link" id="olvidarLlave">Olvidar la llave en este dispositivo</button></span>'
+    + '<span><span class="k">Privacidad:</span> los movimientos viajan cifrados; solo se abren con tu usuario y contraseña o con tu enlace privado. <button type="button" class="link" id="olvidarLlave">Cerrar sesión en este dispositivo</button></span>'
     + (META.titular ? '<span class="rights">© Derechos reservados de ' + esc(META.titular) + '</span>' : '');
   document.getElementById('olvidarLlave').onclick = function(){
-    if (!confirm('¿Quitar la llave de este dispositivo? Para volver a entrar tendrás que abrir otra vez tu enlace privado.')) return;
+    if (!confirm('¿Cerrar la sesión en este dispositivo? Para volver a entrar necesitarás tu usuario y contraseña (o tu enlace privado).')) return;
     try { localStorage.removeItem('mjdm_k'); } catch(e){}
     location.replace(location.pathname);
   };
@@ -923,16 +936,28 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
   'use strict';
   var LS_K = 'mjdm_k', CACHE_DATOS = 'mjdm-datos';
   var candado = document.getElementById('candado'), msg = document.getElementById('candadoMsg'),
+      formClave = document.getElementById('formClave'), inpUsuario = document.getElementById('inpUsuario'),
+      inpClave = document.getElementById('inpClave'), btnEntrar = document.getElementById('btnEntrar'),
       form = document.getElementById('candadoForm'), inp = document.getElementById('candadoInput'),
+      verEnlace = document.getElementById('verEnlace'), verClave = document.getElementById('verClave'),
       reintentar = document.getElementById('candadoReintentar');
-  function mostrar(texto, pedirLlave, conReintento){
-    candado.hidden = false; msg.textContent = texto; form.hidden = !pedirLlave; reintentar.hidden = !conReintento;
+  var modo = 'clave', llaveMemoria = null;
+  var TXT_CLAVE = 'Entra con tu usuario y contraseña.', TXT_ENLACE = 'Pega aquí tu enlace privado (el que termina en #k=…):';
+  function mostrar(texto, pedir, conReintento){
+    candado.hidden = false; msg.textContent = texto;
+    formClave.hidden = !(pedir && modo === 'clave'); verEnlace.hidden = formClave.hidden;
+    form.hidden = !(pedir && modo === 'enlace'); verClave.hidden = form.hidden;
+    reintentar.hidden = !conReintento;
   }
   function b64uDec(s){
     s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
     var bin = atob(s), u = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
     return u;
+  }
+  function b64uEnc(u8){
+    var s = ''; for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
   function llaveDe(texto){
     texto = String(texto || '');
@@ -941,10 +966,13 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     texto = texto.trim();
     return /^[A-Za-z0-9_-]{43}$/.test(texto) ? texto : null;
   }
+  function guardarLlave(k){ llaveMemoria = k; try { localStorage.setItem(LS_K, k); } catch(e){} }
+  function olvidarLlave(){ llaveMemoria = null; try { localStorage.removeItem(LS_K); } catch(e){} }
   function leerLlave(){
     var k = llaveDe(location.hash);
-    if (k){ try { localStorage.setItem(LS_K, k); } catch(e){} return k; }
-    try { return localStorage.getItem(LS_K); } catch(e){ return null; }
+    if (k){ guardarLlave(k); return k; }
+    try { var g = localStorage.getItem(LS_K); if (g) return g; } catch(e){}
+    return llaveMemoria;
   }
   var te = new TextEncoder();
   async function descifrar(buf, k){
@@ -962,33 +990,54 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     var txt = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
     return JSON.parse(txt);
   }
-  async function traer(){
+  // red primero (10 s de límite); sin red, la última copia guardada en este dispositivo
+  async function bajar(nombre, siFalta){
     var ctl = ('AbortController' in window) ? new AbortController() : null;
     var reloj = setTimeout(function(){ if (ctl) ctl.abort(); }, 10000);
     try {
-      var r = await fetch('datos.bin?t=' + Date.now(), {cache:'no-store', signal: ctl ? ctl.signal : undefined});
+      var r = await fetch(nombre + '?t=' + Date.now(), {cache:'no-store', signal: ctl ? ctl.signal : undefined});
+      if (r.status === 404 && siFalta !== undefined){ clearTimeout(reloj); return siFalta; }
       if (!r.ok) throw new Error('el servidor respondió ' + r.status);
       var buf = await r.arrayBuffer();
       clearTimeout(reloj);
-      try { var c = await caches.open(CACHE_DATOS); await c.put('datos.bin', new Response(buf.slice(0))); } catch(e){}
+      try { var c = await caches.open(CACHE_DATOS); await c.put(nombre, new Response(buf.slice(0))); } catch(e){}
       return {buf:buf, red:true};
     } catch(e){
       clearTimeout(reloj);
-      try { var c2 = await caches.open(CACHE_DATOS); var r2 = await c2.match('datos.bin'); if (r2) return {buf: await r2.arrayBuffer(), red:false}; } catch(e2){}
+      try { var c2 = await caches.open(CACHE_DATOS); var r2 = await c2.match(nombre); if (r2) return {buf: await r2.arrayBuffer(), red:false}; } catch(e2){}
       throw e;
     }
+  }
+  function traer(){ return bajar('datos.bin'); }
+  // Usuario y contraseña: acceso.bin trae la llave de la app cifrada con una llave que sale de
+  // PBKDF2-SHA256(usuario en minúsculas + salto de línea + contraseña, sal, vueltas).
+  // Formato: "MJDA" + versión 1 + vueltas (4 bytes) + sal (16) + IV (16) + llave cifrada (32) + HMAC-SHA256 (32).
+  async function abrirAcceso(buf, usuario, clave){
+    var u8 = new Uint8Array(buf);
+    if (u8.length !== 105 || String.fromCharCode(u8[0], u8[1], u8[2], u8[3]) !== 'MJDA' || u8[4] !== 1) throw new Error('el archivo de acceso no es válido');
+    var vueltas = ((u8[5] << 24) >>> 0) + (u8[6] << 16) + (u8[7] << 8) + u8[8];
+    var secreto = te.encode(usuario.normalize('NFC').trim().toLowerCase() + '\n' + clave.normalize('NFC'));
+    var base = await crypto.subtle.importKey('raw', secreto, 'PBKDF2', false, ['deriveBits']);
+    var dk = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt:u8.slice(9, 25), iterations:vueltas}, base, 256);
+    var raiz = await crypto.subtle.importKey('raw', dk, {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+    var kEnc = new Uint8Array(await crypto.subtle.sign('HMAC', raiz, te.encode('mjda-enc-v1')));
+    var kMac = new Uint8Array(await crypto.subtle.sign('HMAC', raiz, te.encode('mjda-mac-v1')));
+    var firma = await crypto.subtle.importKey('raw', kMac, {name:'HMAC', hash:'SHA-256'}, false, ['verify']);
+    if (!(await crypto.subtle.verify('HMAC', firma, u8.subarray(73), u8.subarray(0, 73)))) return null;
+    var aes = await crypto.subtle.importKey('raw', kEnc, {name:'AES-CTR'}, false, ['decrypt']);
+    return b64uEnc(new Uint8Array(await crypto.subtle.decrypt({name:'AES-CTR', counter:u8.slice(25, 41), length:64}, aes, u8.subarray(41, 73))));
   }
   var generadoActual = null;
   async function arrancar(){
     var k = leerLlave();
-    if (!k){ mostrar('Para ver tus movimientos abre tu enlace privado (el que termina en #k=…), o pégalo aquí:', true, false); return; }
+    if (!k){ mostrar(modo === 'clave' ? TXT_CLAVE : TXT_ENLACE, true, false); return; }
     mostrar('Cargando tus movimientos…', false, false);
     var res, datos;
     try { res = await traer(); }
     catch(e){ mostrar('No se pudo descargar la información (' + ((e && e.name === 'AbortError') ? 'la conexión tardó demasiado' : (e && e.message) || e) + ').', false, true); return; }
     try { datos = await descifrar(res.buf, k); }
     catch(e){
-      if (e && e.message === 'llave'){ try { localStorage.removeItem(LS_K); } catch(x){} mostrar('La llave no corresponde. Pega tu enlace privado más reciente:', true, false); return; }
+      if (e && e.message === 'llave'){ olvidarLlave(); modo = 'clave'; mostrar('La sesión guardada ya no sirve. Entra de nuevo con tu usuario y contraseña.', true, false); return; }
       mostrar('No se pudo abrir la información: ' + ((e && e.message) || e), false, true); return;
     }
     generadoActual = datos.meta.generado;
@@ -1007,14 +1056,36 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     return false;
   }
   window.__MJDM_revisar = revisar;
+  formClave.addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var usuario = inpUsuario.value, clave = inpClave.value;
+    if (!usuario.trim() || !clave){ msg.textContent = 'Escribe tu usuario y tu contraseña.'; return; }
+    btnEntrar.disabled = true; btnEntrar.textContent = 'Verificando…';
+    try {
+      var acc = await bajar('acceso.bin', null);
+      if (!acc){ msg.textContent = 'Esta app todavía no tiene usuario y contraseña. Entra con tu enlace privado.'; return; }
+      var k = await abrirAcceso(acc.buf, usuario, clave);
+      if (!k){ msg.textContent = 'Usuario o contraseña incorrectos.'; inpClave.value = ''; inpClave.focus(); return; }
+      guardarLlave(k);
+      inpClave.value = '';
+      if (llaveDe(location.hash)){ try { history.replaceState(null, '', location.pathname + location.search); } catch(e){} }
+      arrancar();
+    } catch(e){
+      msg.textContent = 'No se pudo verificar (' + ((e && e.name === 'AbortError') ? 'la conexión tardó demasiado' : (e && e.message) || e) + '). Revisa la conexión e intenta otra vez.';
+    } finally {
+      btnEntrar.disabled = false; btnEntrar.textContent = 'Entrar';
+    }
+  });
   form.addEventListener('submit', function(ev){
     ev.preventDefault();
     var k = llaveDe(inp.value);
     if (!k){ msg.textContent = 'Ese texto no trae la llave. Copia el enlace completo (termina en #k=…).'; return; }
-    try { localStorage.setItem(LS_K, k); } catch(e){}
+    guardarLlave(k);
     try { history.replaceState(null, '', location.pathname + location.search + '#k=' + k); } catch(e){}
     inp.value = ''; arrancar();
   });
+  verEnlace.addEventListener('click', function(){ modo = 'enlace'; mostrar(TXT_ENLACE, true, false); inp.focus(); });
+  verClave.addEventListener('click', function(){ modo = 'clave'; mostrar(TXT_CLAVE, true, false); inpUsuario.focus(); });
   reintentar.addEventListener('click', arrancar);
   window.addEventListener('hashchange', function(){
     var k = llaveDe(location.hash), guardada = null;
