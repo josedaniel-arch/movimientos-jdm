@@ -192,6 +192,8 @@
   details.card > summary .sum{ font-family:"IBM Plex Mono", monospace; font-weight:500; font-size:13px; color:var(--text-dim); }
   details.card > summary .sum b{ font-weight:600; }
   details.card > .body{ margin-top:14px; display:flex; flex-direction:column; gap:14px; }
+  details.card > .body > .more{ padding-top:0; }
+  details.card > .body > .more:empty{ display:none; }
 
   footer{ display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:var(--text-dim); padding-top:4px; max-width:70ch; }
   footer .k{ color:var(--text-faint); }
@@ -251,6 +253,25 @@
   .candado-caja form .btn{ margin-top:4px; padding:10px 12px; font-size:15px; }
   .candado-caja .btn[disabled]{ opacity:.7; cursor:default; }
   .candado-caja .link{ font-size:13px; }
+  .sesion{ position:fixed; inset:0; z-index:60; display:flex; align-items:flex-start; justify-content:center;
+           padding:calc(72px + env(safe-area-inset-top, 0px)) 16px 16px; background:rgba(0,0,0,.38); }
+  .sesion-caja{ width:100%; max-width:380px; background:var(--surface); border:1px solid var(--border); border-radius:16px;
+                box-shadow:var(--shadow); padding:18px; display:flex; flex-direction:column; gap:10px; }
+  .sesion-caja h2{ font-size:17px; }
+  .sesion-caja p{ margin:0; color:var(--text-dim); font-size:13.5px; }
+  #sesionQuien{ color:var(--text); font-weight:600; }
+  .sesion-botones{ display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; margin-top:4px; }
+  .sesion-botones .btn{ padding:9px 14px; font-size:14px; }
+  .sesion-vista{ display:flex; flex-direction:column; gap:10px; }
+  .sesion-caja label{ font-size:12px; color:var(--text-faint); margin-bottom:-4px; }
+  .sesion-caja input{ width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); font-size:16px; }
+  .sesion-caja .sesion-aviso{ color:var(--warn); }
+  .sesion-aviso:empty{ display:none; }
+  #sesionClave{ color:var(--text); }
+  .btn.primario{ background:var(--accent); border-color:transparent; color:var(--surface); }
+  .btn[disabled]{ opacity:.7; cursor:default; }
+  a.btn{ display:block; text-align:center; text-decoration:none; }
+  a.btn.primario{ padding:11px 14px; font-size:15px; }
 </style>
 </head>
 <body>
@@ -274,6 +295,43 @@
     <button class="link" type="button" id="verEnlace" hidden>Entrar con el enlace privado</button>
     <button class="link" type="button" id="verClave" hidden>Entrar con usuario y contraseña</button>
     <button class="btn" type="button" id="candadoReintentar" hidden>Reintentar</button>
+  </div>
+</div>
+<div class="sesion" id="sesion" hidden role="dialog" aria-modal="true" aria-labelledby="sesionTitulo">
+  <div class="sesion-caja">
+    <div class="sesion-vista" id="sesionVista">
+      <h2 id="sesionTitulo">Sesión en este dispositivo</h2>
+      <p id="sesionQuien"></p>
+      <p id="sesionClave" hidden></p>
+      <p>En otro celular o navegador, o después de cerrar la sesión, la app pide el usuario y la contraseña.</p>
+      <div class="sesion-botones">
+        <button class="btn" type="button" id="sesionCambiar">Cambiar contraseña</button>
+        <button class="btn" type="button" id="sesionCerrar">Cerrar sesión</button>
+        <button class="btn" type="button" id="sesionListo">Listo</button>
+      </div>
+    </div>
+    <form class="sesion-vista" id="cambioForm" hidden>
+      <h2>Cambiar la contraseña</h2>
+      <p>La contraseña nueva sirve para entrar desde cualquier celular o navegador. Mínimo 10 caracteres.</p>
+      <label for="cambioUsuario">Usuario</label>
+      <input id="cambioUsuario" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+      <label for="cambioClave">Contraseña nueva</label>
+      <input id="cambioClave" name="new-password" type="password" autocomplete="new-password">
+      <label for="cambioClave2">Repite la contraseña nueva</label>
+      <input id="cambioClave2" type="password" autocomplete="new-password">
+      <p class="sesion-aviso" id="cambioMsg" role="status" aria-live="polite"></p>
+      <div class="sesion-botones">
+        <button class="btn" type="button" id="cambioCancelar">Cancelar</button>
+        <button class="btn primario" type="submit" id="cambioPreparar">Continuar</button>
+      </div>
+    </form>
+    <div class="sesion-vista" id="cambioEnvio" hidden>
+      <h2>Último paso: enviar el correo</h2>
+      <p>Toca el botón: se abre tu correo con un mensaje listo para tu propia cuenta. Envíalo sin cambiar nada. Tu PC aplica la contraseña nueva en la siguiente hora; mientras tanto sigue sirviendo la de antes.</p>
+      <a class="btn primario" id="cambioEnviar" href="#">Abrir el correo</a>
+      <p>¿No se abrió? Copia el texto y envíalo a <b id="cambioDestino"></b> con el asunto «Movimientos JDM: cambio de contraseña». <button type="button" class="link" id="cambioCopiar">Copiar el texto</button></p>
+      <div class="sesion-botones"><button class="btn" type="button" id="cambioListo">Listo</button></div>
+    </div>
   </div>
 </div>
 
@@ -341,17 +399,20 @@
         <div class="card-head"><h3>Por origen</h3><span class="note" id="catInNote"></span></div>
         <div class="rows" id="catIn"></div>
       </div>
-      <div class="card">
-        <div class="card-head"><h3>Quién te envía plata</h3><span class="note">Los 15 que más suman</span></div>
+      <details class="card desplegable" id="secTopIn">
+        <summary>Quién te envía plata <span class="sum">Los 15 que más suman</span></summary>
+        <div class="body">
         <div class="table-scroll">
           <table>
             <thead><tr><th>Remitente</th><th class="num">Total</th><th class="num">%</th></tr></thead>
             <tbody id="topIn"></tbody>
           </table>
         </div>
-      </div>
-      <div class="card detalle">
-        <div class="card-head"><h3>Detalle de ingresos</h3><span class="note" id="tableNoteIn"></span></div>
+        </div>
+      </details>
+      <details class="card detalle desplegable" id="secDetIn">
+        <summary>Detalle de ingresos <span class="sum" id="tableNoteIn"></span></summary>
+        <div class="body">
         <div class="table-scroll">
           <table>
             <thead><tr><th class="sortable" data-t="in" data-sort="fecha">Fecha ▾</th><th>Movimiento</th><th class="num sortable" data-t="in" data-sort="monto">Monto</th></tr></thead>
@@ -359,7 +420,8 @@
           </table>
         </div>
         <div class="more" id="moreIn"></div>
-      </div>
+        </div>
+      </details>
     </section>
 
     <!-- EGRESOS -->
@@ -379,22 +441,27 @@
         <div class="card-head"><h3>Por categoría</h3><span class="note" id="catOutNote"></span></div>
         <div class="rows" id="catOut"></div>
       </div>
-      <div class="card">
-        <div class="card-head"><h3>A dónde va</h3><span class="note">Los 15 destinos que más suman</span></div>
+      <details class="card desplegable" id="secTopOut">
+        <summary>A dónde va <span class="sum">Los 15 destinos que más suman</span></summary>
+        <div class="body">
         <div class="table-scroll">
           <table>
             <thead><tr><th>Destino</th><th class="num">Total</th><th class="num">%</th></tr></thead>
             <tbody id="topOut"></tbody>
           </table>
         </div>
-      </div>
-      <div class="card" id="cardUnnamed">
-        <div class="card-head"><h3>Cuentas sin nombre</h3><span class="note" id="unnamedNote"></span></div>
-        <div id="unnamedIntro" class="empty-note" style="margin-bottom:10px">Las alertas del banco solo traen el número de la cuenta destino. Escribe aquí a quién pertenece cada una: el nombre queda guardado en este dispositivo para todos los movimientos, pasados y futuros.</div>
+        </div>
+      </details>
+      <details class="card desplegable" id="cardUnnamed">
+        <summary>Cuentas sin nombre <span class="sum" id="unnamedNote"></span></summary>
+        <div class="body">
+        <div id="unnamedIntro" class="empty-note">Las alertas del banco solo traen el número de la cuenta destino. Escribe aquí a quién pertenece cada una: el nombre queda guardado en este dispositivo para todos los movimientos, pasados y futuros.</div>
         <div class="rows" id="unnamed"></div>
-      </div>
-      <div class="card detalle">
-        <div class="card-head"><h3>Detalle de egresos</h3><span class="note" id="tableNoteOut"></span></div>
+        </div>
+      </details>
+      <details class="card detalle desplegable" id="secDetOut">
+        <summary>Detalle de egresos <span class="sum" id="tableNoteOut"></span></summary>
+        <div class="body">
         <div class="table-scroll">
           <table>
             <thead><tr><th class="sortable" data-t="out" data-sort="fecha">Fecha ▾</th><th>Movimiento</th><th class="num sortable" data-t="out" data-sort="monto">Monto</th></tr></thead>
@@ -402,7 +469,8 @@
           </table>
         </div>
         <div class="more" id="moreOut"></div>
-      </div>
+        </div>
+      </details>
     </section>
   </div>
 
@@ -706,6 +774,18 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     renderTabla('all', rows);
   }
   document.getElementById('balance').addEventListener('toggle', function(){ if (this.open) render(); });
+  // listados desplegables: cerrados al abrir; se recuerda en este dispositivo cuáles dejó abiertos
+  (function(){
+    var CLAVE = 'mjdm_abiertos', abiertos = {};
+    try { abiertos = JSON.parse(localStorage.getItem(CLAVE) || '{}') || {}; } catch(e){ abiertos = {}; }
+    Array.prototype.forEach.call(document.querySelectorAll('details.desplegable'), function(d){
+      if (abiertos[d.id]) d.open = true;
+      d.addEventListener('toggle', function(){
+        abiertos[d.id] = d.open;
+        try { localStorage.setItem(CLAVE, JSON.stringify(abiertos)); } catch(e){}
+      });
+    });
+  })();
   function maxDe(arr){ var m = null; arr.forEach(function(d){ if (!m || d.monto > m.monto) m = d; }); return m; }
   function tile(label, value, cls, sub){
     var txt = !/^[+−$]/.test(value) && value !== '—';
@@ -906,7 +986,9 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     + '<span class="badge on">● ' + numFmt(DATA.length) + ' movimientos</span>'
     + '<span class="badge">Corte: ' + fechaLarga(META.corte) + '</span>'
     + (window.__MJDM_OFFLINE ? '<span class="badge warn">Sin conexión · datos guardados</span>' : '')
-    + '<button type="button" class="badge refresh" id="btnActualizar" title="Buscar datos nuevos">↻ Actualizar</button>';
+    + '<button type="button" class="badge refresh" id="btnActualizar" title="Buscar datos nuevos">↻ Actualizar</button>'
+    + '<button type="button" class="badge refresh" id="btnSesion" title="Usuario y sesión de este dispositivo">🔒 Sesión</button>';
+  document.getElementById('btnSesion').onclick = function(){ if (window.__MJDM_sesion) window.__MJDM_sesion(); };
   document.querySelector('.brand h1').textContent = META.titulo || 'Movimientos';
   document.getElementById('btnActualizar').onclick = function(){
     var b = this; b.disabled = true; b.textContent = 'Buscando…';
@@ -920,13 +1002,10 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     + '<span><span class="k">Nombres de cuentas:</span> el banco solo avisa el número de la cuenta destino. Los nombres precargados vienen de tus registros; los que escribas aquí quedan guardados en este dispositivo.</span>'
     + '<span><span class="k">Ojo:</span> las alertas no traen el saldo de la cuenta, así que el neto es ingresos menos egresos avisados, no el saldo. Las categorías de las compras se asignan por el nombre del comercio y pueden fallar en algún caso.</span>'
     + '<span><span class="k">Actualización:</span> datos al ' + fechaLarga(META.corte) + ' (generados el ' + esc(META.generado) + '). La app se actualiza sola cada hora desde tu PC mientras esté encendido.</span>'
-    + '<span><span class="k">Privacidad:</span> los movimientos viajan cifrados; solo se abren con tu usuario y contraseña o con tu enlace privado. <button type="button" class="link" id="olvidarLlave">Cerrar sesión en este dispositivo</button></span>'
+    + '<span><span class="k">Privacidad:</span> los movimientos viajan cifrados; solo se abren con tu usuario y contraseña o con tu enlace privado. <button type="button" class="link" id="linkCambiarClave">Cambiar contraseña</button> · <button type="button" class="link" id="olvidarLlave">Cerrar sesión en este dispositivo</button></span>'
     + (META.titular ? '<span class="rights">© Derechos reservados de ' + esc(META.titular) + '</span>' : '');
-  document.getElementById('olvidarLlave').onclick = function(){
-    if (!confirm('¿Cerrar la sesión en este dispositivo? Para volver a entrar necesitarás tu usuario y contraseña (o tu enlace privado).')) return;
-    try { localStorage.removeItem('mjdm_k'); } catch(e){}
-    location.replace(location.pathname);
-  };
+  document.getElementById('olvidarLlave').onclick = function(){ if (window.__MJDM_cerrarSesion) window.__MJDM_cerrarSesion(); };
+  document.getElementById('linkCambiarClave').onclick = function(){ if (window.__MJDM_sesion) window.__MJDM_sesion('cambio'); };
 
   render();
 }
@@ -934,7 +1013,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
 <script>
 (function(){
   'use strict';
-  var LS_K = 'mjdm_k', CACHE_DATOS = 'mjdm-datos';
+  var LS_K = 'mjdm_k', LS_U = 'mjdm_u', CACHE_DATOS = 'mjdm-datos';
   var candado = document.getElementById('candado'), msg = document.getElementById('candadoMsg'),
       formClave = document.getElementById('formClave'), inpUsuario = document.getElementById('inpUsuario'),
       inpClave = document.getElementById('inpClave'), btnEntrar = document.getElementById('btnEntrar'),
@@ -968,9 +1047,14 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
   }
   function guardarLlave(k){ llaveMemoria = k; try { localStorage.setItem(LS_K, k); } catch(e){} }
   function olvidarLlave(){ llaveMemoria = null; try { localStorage.removeItem(LS_K); } catch(e){} }
+  function quienEntro(u){ try { if (u) localStorage.setItem(LS_U, u); else localStorage.removeItem(LS_U); } catch(e){} }
   function leerLlave(){
     var k = llaveDe(location.hash);
-    if (k){ guardarLlave(k); return k; }
+    if (k){
+      var antes = null; try { antes = localStorage.getItem(LS_K); } catch(e){}
+      if (antes !== k) quienEntro(null);
+      guardarLlave(k); return k;
+    }
     try { var g = localStorage.getItem(LS_K); if (g) return g; } catch(e){}
     return llaveMemoria;
   }
@@ -1037,13 +1121,14 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     catch(e){ mostrar('No se pudo descargar la información (' + ((e && e.name === 'AbortError') ? 'la conexión tardó demasiado' : (e && e.message) || e) + ').', false, true); return; }
     try { datos = await descifrar(res.buf, k); }
     catch(e){
-      if (e && e.message === 'llave'){ olvidarLlave(); modo = 'clave'; mostrar('La sesión guardada ya no sirve. Entra de nuevo con tu usuario y contraseña.', true, false); return; }
+      if (e && e.message === 'llave'){ olvidarLlave(); quienEntro(null); modo = 'clave'; mostrar('La sesión guardada ya no sirve. Entra de nuevo con tu usuario y contraseña.', true, false); return; }
       mostrar('No se pudo abrir la información: ' + ((e && e.message) || e), false, true); return;
     }
     generadoActual = datos.meta.generado;
     window.__MJDM_OFFLINE = !res.red;
     candado.hidden = true;
     document.getElementById('app').hidden = false;
+    window.__MJDM_META = datos.meta;
     iniciarPanel(datos.meta, datos.rows, datos.alias || {});
   }
   async function revisar(){
@@ -1067,6 +1152,7 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
       var k = await abrirAcceso(acc.buf, usuario, clave);
       if (!k){ msg.textContent = 'Usuario o contraseña incorrectos.'; inpClave.value = ''; inpClave.focus(); return; }
       guardarLlave(k);
+      quienEntro(usuario.normalize('NFC').trim().toLowerCase());
       inpClave.value = '';
       if (llaveDe(location.hash)){ try { history.replaceState(null, '', location.pathname + location.search); } catch(e){} }
       arrancar();
@@ -1081,12 +1167,129 @@ function iniciarPanel(META, ROWS, ALIAS_BASE){
     var k = llaveDe(inp.value);
     if (!k){ msg.textContent = 'Ese texto no trae la llave. Copia el enlace completo (termina en #k=…).'; return; }
     guardarLlave(k);
+    quienEntro(null);
     try { history.replaceState(null, '', location.pathname + location.search + '#k=' + k); } catch(e){}
     inp.value = ''; arrancar();
   });
   verEnlace.addEventListener('click', function(){ modo = 'enlace'; mostrar(TXT_ENLACE, true, false); inp.focus(); });
   verClave.addEventListener('click', function(){ modo = 'clave'; mostrar(TXT_CLAVE, true, false); inpUsuario.focus(); });
   reintentar.addEventListener('click', arrancar);
+  // ventana "Sesión": con quién se entró en este dispositivo y cerrar sesión
+  var sesion = document.getElementById('sesion');
+  function cerrarSesion(){
+    if (!confirm('¿Cerrar la sesión en este dispositivo? Para volver a entrar necesitarás tu usuario y contraseña (o tu enlace privado).')) return;
+    olvidarLlave(); quienEntro(null);
+    location.replace(location.pathname);
+  }
+  window.__MJDM_cerrarSesion = cerrarSesion;
+  var LS_C = 'mjdm_cambio';
+  var sesionVista = document.getElementById('sesionVista'), cambioForm = document.getElementById('cambioForm'),
+      cambioEnvio = document.getElementById('cambioEnvio'), cambioMsg = document.getElementById('cambioMsg');
+  function verVista(cual){
+    sesionVista.hidden = cual !== 'sesion'; cambioForm.hidden = cual !== 'cambio'; cambioEnvio.hidden = cual !== 'envio';
+  }
+  function fechaHora(ts){
+    var d = new Date(ts * 1000);
+    try { return d.toLocaleDateString('es-CO', {day:'numeric', month:'short', year:'numeric'}) + ', ' + d.toLocaleTimeString('es-CO', {hour:'numeric', minute:'2-digit'}); }
+    catch(e){ return d.toISOString().slice(0, 16).replace('T', ' '); }
+  }
+  function punto(s){ return /\.$/.test(s) ? s : s + '.'; }
+  function estadoClave(){
+    var acc = (window.__MJDM_META || {}).acceso || null, pend = 0;
+    try { pend = parseInt(localStorage.getItem(LS_C) || '0', 10) || 0; } catch(e){}
+    if (pend && acc && acc.ts >= pend){ pend = 0; try { localStorage.removeItem(LS_C); } catch(e){} }
+    if (pend) return 'Cambio de contraseña pendiente (lo pediste el ' + fechaHora(pend) + '). Tu PC lo aplica en la siguiente hora, cuando le llegue el correo; mientras tanto sirve la contraseña de antes.';
+    if (acc && acc.ts) return punto('La contraseña actual es del ' + fechaHora(acc.ts));
+    return '';
+  }
+  window.__MJDM_sesion = function(modo){
+    var u = null; try { u = localStorage.getItem(LS_U); } catch(e){}
+    document.getElementById('sesionQuien').textContent = u ? 'Entraste como ' + u + '.' : 'Entraste con el enlace privado.';
+    var ec = estadoClave(), pc = document.getElementById('sesionClave');
+    pc.textContent = ec; pc.hidden = !ec;
+    sesion.hidden = false;
+    if (modo === 'cambio') abrirCambio(); else { verVista('sesion'); document.getElementById('sesionListo').focus(); }
+  };
+  function abrirCambio(){
+    verVista('cambio');
+    var u = null; try { u = localStorage.getItem(LS_U); } catch(e){}
+    var iu = document.getElementById('cambioUsuario');
+    iu.value = u || ''; document.getElementById('cambioClave').value = ''; document.getElementById('cambioClave2').value = '';
+    cambioMsg.textContent = '';
+    (u ? document.getElementById('cambioClave') : iu).focus();
+  }
+  async function firmar(llave, datos){
+    var kk = await crypto.subtle.importKey('raw', llave, {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+    return new Uint8Array(await crypto.subtle.sign('HMAC', kk, datos));
+  }
+  // acceso.bin nuevo (mismo formato que crear_acceso.py) y solicitud firmada con la llave de la app:
+  // "MJDC1." + segundos + "." + usuario + "." + acceso.bin + "." + HMAC(HMAC(llave, "mjdm-cambio-v1"), lo anterior)
+  async function solicitudCambio(k, usuario, clave){
+    var llave = b64uDec(k), sal = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(16)), vueltas = 600000;
+    var base = await crypto.subtle.importKey('raw', te.encode(usuario + '\n' + clave.normalize('NFC')), 'PBKDF2', false, ['deriveBits']);
+    var dk = new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt:sal, iterations:vueltas}, base, 256));
+    var kEnc = await firmar(dk, te.encode('mjda-enc-v1')), kMac = await firmar(dk, te.encode('mjda-mac-v1'));
+    var aes = await crypto.subtle.importKey('raw', kEnc, {name:'AES-CTR'}, false, ['encrypt']);
+    var cif = new Uint8Array(await crypto.subtle.encrypt({name:'AES-CTR', counter:iv, length:64}, aes, llave));
+    var blob = new Uint8Array(105);
+    blob.set(te.encode('MJDA'), 0); blob[4] = 1;
+    blob[5] = (vueltas >>> 24) & 255; blob[6] = (vueltas >>> 16) & 255; blob[7] = (vueltas >>> 8) & 255; blob[8] = vueltas & 255;
+    blob.set(sal, 9); blob.set(iv, 25); blob.set(cif, 41);
+    blob.set(await firmar(kMac, blob.subarray(0, 73)), 73);
+    if ((await abrirAcceso(blob, usuario, clave)) !== k) throw new Error('la verificación del acceso nuevo falló');
+    var ts = Math.floor(Date.now() / 1000), u64 = b64uEnc(te.encode(usuario)), a64 = b64uEnc(blob);
+    var carga = 'MJDC1.' + ts + '.' + u64 + '.' + a64;
+    var f = await firmar(await firmar(llave, te.encode('mjdm-cambio-v1')), te.encode(carga));
+    return {ts: ts, partes: ['MJDC1', String(ts), u64, a64, b64uEnc(f)]};
+  }
+  function textoCorreo(s){
+    var acc = s.partes[3], lineas = [];
+    for (var i = 0; i < acc.length; i += 47) lineas.push(acc.slice(i, i + 47));
+    lineas[lineas.length - 1] += '.';
+    return 'Solicitud para cambiar la contraseña de la app Movimientos JDM.\r\n'
+      + 'Envía este correo sin cambiar nada: tu PC aplica la contraseña nueva en la siguiente hora.\r\n\r\n'
+      + 'INICIO-MJDC\r\n' + s.partes[0] + '.' + s.partes[1] + '.' + s.partes[2] + '.\r\n' + lineas.join('\r\n') + '\r\n' + s.partes[4] + '\r\nFIN-MJDC\r\n';
+  }
+  var ASUNTO_CAMBIO = 'Movimientos JDM: cambio de contraseña';
+  cambioForm.addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var btn = document.getElementById('cambioPreparar');
+    var usuario = document.getElementById('cambioUsuario').value.normalize('NFC').trim().toLowerCase();
+    var c1 = document.getElementById('cambioClave').value, c2 = document.getElementById('cambioClave2').value;
+    var correo = (window.__MJDM_META || {}).correo;
+    if (!usuario){ cambioMsg.textContent = 'Escribe el usuario.'; return; }
+    if (c1.length < 10){ cambioMsg.textContent = 'La contraseña debe tener al menos 10 caracteres.'; return; }
+    if (c1.toLowerCase().indexOf(usuario) >= 0){ cambioMsg.textContent = 'La contraseña no debe llevar el usuario.'; return; }
+    if (c1 !== c2){ cambioMsg.textContent = 'Las dos contraseñas no coinciden.'; return; }
+    if (!correo){ cambioMsg.textContent = 'Todavía no se puede cambiar desde aquí: espera la próxima actualización de la app (cada hora) e intenta de nuevo.'; return; }
+    var k = leerLlave(); if (!k){ cambioMsg.textContent = 'Vuelve a entrar a la app y repite el cambio.'; return; }
+    btn.disabled = true; btn.textContent = 'Preparando…'; cambioMsg.textContent = '';
+    try {
+      var s = await solicitudCambio(k, usuario, c1), texto = textoCorreo(s);
+      document.getElementById('cambioEnviar').href = 'mailto:' + correo + '?subject=' + encodeURIComponent(ASUNTO_CAMBIO) + '&body=' + encodeURIComponent(texto);
+      document.getElementById('cambioDestino').textContent = correo;
+      var bc = document.getElementById('cambioCopiar');
+      bc.textContent = 'Copiar el texto';
+      bc.onclick = function(){
+        (navigator.clipboard ? navigator.clipboard.writeText(texto) : Promise.reject(new Error('sin portapapeles'))).then(
+          function(){ bc.textContent = 'Copiado'; }, function(){ bc.textContent = 'No se pudo copiar'; });
+      };
+      try { localStorage.setItem(LS_C, String(s.ts)); } catch(e){}
+      document.getElementById('cambioClave').value = ''; document.getElementById('cambioClave2').value = '';
+      verVista('envio');
+    } catch(e){
+      cambioMsg.textContent = 'No se pudo preparar el cambio: ' + ((e && e.message) || e);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Continuar';
+    }
+  });
+  document.getElementById('sesionCambiar').addEventListener('click', abrirCambio);
+  document.getElementById('cambioCancelar').addEventListener('click', function(){ window.__MJDM_sesion(); });
+  document.getElementById('cambioListo').addEventListener('click', function(){ sesion.hidden = true; });
+  document.getElementById('sesionListo').addEventListener('click', function(){ sesion.hidden = true; });
+  document.getElementById('sesionCerrar').addEventListener('click', cerrarSesion);
+  sesion.addEventListener('click', function(ev){ if (ev.target === sesion) sesion.hidden = true; });
+  document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape' && !sesion.hidden) sesion.hidden = true; });
   window.addEventListener('hashchange', function(){
     var k = llaveDe(location.hash), guardada = null;
     try { guardada = localStorage.getItem(LS_K); } catch(e){}
